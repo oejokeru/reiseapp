@@ -2,7 +2,7 @@ import os
 import math
 from dataclasses import dataclass
 from datetime import datetime, date, timedelta
-from typing import List, Tuple
+from typing import List
 
 import streamlit as st
 from amadeus import Client, ResponseError
@@ -40,22 +40,6 @@ HOME = dict(
     cost_per_layover=1200,
 )
 
-# ======================================================
-# Flyplassinfo
-# ======================================================
-AIRPORT_INFO = {
-    "OSL": ("Oslo Gardermoen", "Norge"),
-    "SIN": ("Singapore Changi", "Singapore"),
-    "KUL": ("Kuala Lumpur", "Malaysia"),
-    "BKK": ("Bangkok", "Thailand"),
-    "MEL": ("Melbourne", "Australia"),
-    "SYD": ("Sydney", "Australia"),
-    "FRA": ("Frankfurt", "Tyskland"),
-    "DOH": ("Doha", "Qatar"),
-    "DXB": ("Dubai", "UAE"),
-    "IST": ("Istanbul", "Tyrkia"),
-}
-
 AIRLINE_BOOKING_URLS = {
     "LH": "https://www.lufthansa.com",
     "SQ": "https://www.singaporeair.com",
@@ -88,11 +72,11 @@ class Offer:
     legs: List[Leg]
 
 # ======================================================
-# UI setup
+# UI
 # ======================================================
-st.set_page_config(page_title="Reiseapp – Ryddig", layout="wide")
-st.title("✈️ Reiseapp – Ryddig (TOPP 5)")
-st.caption("Klikk på et alternativ for å se detaljer rett under – ingen hopping.")
+st.set_page_config(page_title="Reiseapp – Stabil", layout="wide")
+st.title("✈️ Reiseapp – Stabil (TOPP 5)")
+st.caption("Inline detaljer • ingen hopping • robust mot 0 treff")
 
 # ======================================================
 # Sidebar – passasjerer
@@ -115,16 +99,12 @@ for a in child_ages:
     else:
         children += 1
 
-total_pax = adults + children
-
 # ======================================================
 # Sidebar – rutevalg
 # ======================================================
 st.sidebar.header("🌍 Flyplasser")
-
 asia_arrival = st.sidebar.selectbox("Asia – ankomst", ["SIN", "KUL", "BKK"])
 asia_depart = st.sidebar.selectbox("Asia – avreise", ["SIN", "KUL", "BKK"], index=1)
-
 aus_arrival = st.sidebar.selectbox("Australia – ankomst", ["MEL", "SYD"])
 aus_depart = st.sidebar.selectbox("Australia – avreise", ["MEL", "SYD"], index=1)
 
@@ -132,10 +112,8 @@ aus_depart = st.sidebar.selectbox("Australia – avreise", ["MEL", "SYD"], index
 # Sidebar – datoer
 # ======================================================
 st.sidebar.header("📅 Reisetid")
-
 start_osl = st.sidebar.date_input("OSL → Asia", date(2026, 7, 1))
 flex = st.sidebar.slider("Fleksibilitet ± dager", 0, 3, 1)
-
 asia_stay = st.sidebar.slider("Opphold Asia (dager)", 5, 30, (8, 12))
 aus_stay = st.sidebar.slider("Opphold Australia (dager)", 5, 20, (6, 12))
 
@@ -143,9 +121,7 @@ aus_stay = st.sidebar.slider("Opphold Australia (dager)", 5, 20, (6, 12))
 # Helper-funksjoner
 # ======================================================
 def dt(s): return datetime.strptime(s, "%Y-%m-%d %H:%M")
-
 def minutes(a, b): return int((b - a).total_seconds() / 60)
-
 def flight_hours(a, b): return (b - a).total_seconds() / 3600
 
 def route_codes(legs):
@@ -234,19 +210,13 @@ def search_block(origin, dest, dates):
     return out
 
 # ======================================================
-# START
+# Render TOPP 5 – TRYGG
 # ======================================================
-if not st.button("🔍 Start scan"):
-    st.stop()
-
-# ======================================================
-# 1) OSL → Asia
-# ======================================================
-st.header("1️⃣ OSL → Asia")
-dates1 = [start_osl + timedelta(days=i) for i in range(-flex, flex + 1)]
-offers1 = search_block("OSL", asia_arrival, dates1)
-
 def render_top(title, offers, profile):
+    if not offers:
+        st.warning(f"Ingen treff for {title}. Prøv andre datoer eller flyplasser.")
+        return None
+
     scored = [(o, *analyze(o, profile)) for o in offers]
     scored.sort(key=lambda x: (len(x[2]) > 0, len(x[3]) > 0, x[1]))
     top = scored[:5]
@@ -254,10 +224,8 @@ def render_top(title, offers, profile):
     st.subheader(title)
     for i, (o, score, red, yellow, green) in enumerate(top, start=1):
         badge = "🟢"
-        if red:
-            badge = "🔴"
-        elif yellow:
-            badge = "🟡"
+        if red: badge = "🔴"
+        elif yellow: badge = "🟡"
 
         with st.expander(f"{badge} {i}. {route_codes(o.legs)} • {o.price:,} kr"):
             st.write(f"**Dato:** {o.depart_date}")
@@ -267,14 +235,13 @@ def render_top(title, offers, profile):
                     f"{leg.airline} {leg.flight} | "
                     f"{leg.depart} → {leg.arrive}"
                 )
+
             if red:
                 st.error("Røde flagg")
-                for r in red:
-                    st.write("🔴", r)
+                for r in red: st.write("🔴", r)
             elif yellow:
                 st.warning("Kompromiss")
-                for y in yellow:
-                    st.write("🟡", y)
+                for y in yellow: st.write("🟡", y)
             else:
                 st.success("Ser veldig bra ut")
 
@@ -288,29 +255,40 @@ def render_top(title, offers, profile):
 
     return top[0][0].depart_date
 
+# ======================================================
+# START
+# ======================================================
+if not st.button("🔍 Start scan"):
+    st.stop()
+
+# ======================================================
+# 1) OSL → Asia
+# ======================================================
+st.header("1️⃣ OSL → Asia")
+dates1 = [start_osl + timedelta(days=i) for i in range(-flex, flex + 1)]
+offers1 = search_block("OSL", asia_arrival, dates1)
 asia_base = render_top("OSL → Asia (TOPP 5)", offers1, OUTBOUND)
+if not asia_base:
+    st.stop()
 
 # ======================================================
 # 2) Asia → Australia
 # ======================================================
 st.header("2️⃣ Asia → Australia")
 start2 = date.fromisoformat(asia_base) + timedelta(days=asia_stay[0])
-end2 = date.fromisoformat(asia_base) + timedelta(days=asia_stay[1])
-dates2 = [start2 + timedelta(days=i) for i in range(0, min(3, (end2 - start2).days + 1))]
-
+dates2 = [start2 + timedelta(days=i) for i in range(3)]
 offers2 = search_block(asia_depart, aus_arrival, dates2)
 aus_base = render_top("Asia → Australia (TOPP 5)", offers2, OUTBOUND)
+if not aus_base:
+    st.stop()
 
 # ======================================================
 # 3) Australia → OSL
 # ======================================================
 st.header("3️⃣ Australia → OSL")
 start3 = date.fromisoformat(aus_base) + timedelta(days=aus_stay[0])
-end3 = date.fromisoformat(aus_base) + timedelta(days=aus_stay[1])
-dates3 = [start3 + timedelta(days=i) for i in range(0, min(3, (end3 - start3).days + 1))]
-
+dates3 = [start3 + timedelta(days=i) for i in range(3)]
 offers3 = search_block(aus_depart, "OSL", dates3)
 render_top("Australia → OSL (TOPP 5)", offers3, HOME)
 
-st.divider()
-st.success("Ferdig scan – klikk på et alternativ for detaljer.")
+st.success("Scan fullført – klikk på et alternativ for detaljer.")
